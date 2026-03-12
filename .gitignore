@@ -1,0 +1,144 @@
+#============================================
+# IC Design .gitignore
+#============================================
+
+#=================== 仿真 ===================
+# Icarus Verilog
+sim/build/
+sim/logs/
+sim/obj_dir/
+*.vvp
+*.fst
+*.vcd
+*.fsdb
+*.dump
+sim/*.done
+sim/sim_main.cpp
+counter_tb.fst
+sim/counter_tb.fst
+
+# ModelSim / Questa
+work/
+transcript
+vsim.wlf
+*.wlf
+vsim.dbg
+
+# VCS
+simv
+simv.daidr
+ucli.key
+*.log
+VERDI_DIR/
+
+# Cadence Xcelium
+xcelium/
+snapshot/
+
+# Synopsys Verdi
+*.fsdb
+novas.rc
+pli.tab
+
+# Aldec Riviera-PRO
+riviera_pro.jou
+riviera_pro.wlf
+
+# Verdi
+verdi.log
+
+
+#=================== 综合 ===================
+# Yosys
+frontend/synthesis/
+*.blif
+*.json
+*.rtlil
+
+# Design Compiler
+*.ddc
+*.svf
+*.sdc
+reports/
+logs/
+*.out
+
+# Genus
+*.mv
+*.def
+*.gds
+
+
+#=================== FPGA ===================
+# Vivado
+*.bit
+*.bin
+*.rpt
+*.util
+*.dcp
+*.hw
+*.ip_user_files/
+*.cache/
+*.runs/
+*.sim/
+*_wrapper.hdf
+
+# Quartus
+*.rbf
+*.sof
+*.pof
+output_files/
+db/
+incremental_db/
+*.qws
+*.quartus/
+
+# Intel FPGA
+*.aco
+*.out
+*.smsg
+
+
+#=================== 波形文件 ===================
+*.vcd
+*.fst
+*.fsdb
+*.shm
+*.vpd
+*.evcd
+
+
+#=================== 临时文件 ===================
+*~
+*.swp
+*.swo
+*#
+.DS_Store
+Thumbs.db
+
+
+#=================== 库文件 ===================
+# 第三方 IP 库通常不上传
+lib/external/
+lib/vendor/
+*.lib
+*.db
+
+
+#=================== 构建产物 ===================
+*.o
+*.a
+*.so
+*.d
+*.d.gz
+*.cache/
+
+
+#=================== 文档生成 ===================
+docs/html/
+docs/pdf/
+*.pdf.bak
+
+
+#=================== 项目特定 ===================
+docs/protocol_spec/

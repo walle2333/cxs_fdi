@@ -1,0 +1,32 @@
+#============================================
+# Yosys Synthesis Script (通用模板)
+# 
+# 使用方式: yosys synth.ys
+# 或者从 Makefile 调用 (推荐)
+#============================================
+
+# 读取设计目录下的所有Verilog/SystemVerilog文件
+# 如有多个目录，可重复此行:
+#   read_verilog -sv design/rtl/*.sv
+#   read_verilog -sv design/submodule/*.sv
+read_verilog -sv design/rtl/*.sv
+
+# 层级检查和top模块
+#JW|# 注意: 必须将 "ucie_cxs_fdi_top" 替换为实际的top模块名称
+#VR|hierarchy -check -top ucie_cxs_fdi_top
+
+# 进程转换
+proc
+
+# 优化
+opt
+
+# 高层综合
+synth
+
+# 输出网表 (根据需要修改输出路径和文件名)
+# write_verilog frontend/synthesis/netlist.v
+# write_json  frontend/synthesis/netlist.json
+
+# 统计
+stat
