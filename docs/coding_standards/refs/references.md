@@ -55,7 +55,7 @@
 
 | 工具 | 文档链接 |
 |------|---------|
-| Vivado | https://docs.amd.com/r/2024.1-English/ug901-vivado-synthesis/SystemVerilog-Support |
+| Vivado | https://docs.amd.com/r/en-US/ug901-vivado-synthesis/SystemVerilog-Support |
 | VCS | Synopsys官方文档 |
 | Verilator | https://www.veripool.org/verilator/ |
 
@@ -65,4 +65,4 @@
 
 | 版本 | 日期 | 描述 |
 |------|------|------|
-| 1.0 | 2024-03-08 | 初始版本 |
+| 1.0 | 2026-03-08 | 初始版本 |
