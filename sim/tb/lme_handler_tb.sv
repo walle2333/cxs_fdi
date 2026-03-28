@@ -67,8 +67,16 @@ module lme_handler_tb;
     logic                    lme_error;
     logic                    lme_timeout;
     logic                    lme_intr;
-    sb_msg_t                 exp_cxs_tx_queue[$];
-    sb_msg_t                 exp_fdi_tx_queue[$];
+    logic [SB_MSG_WIDTH-1:0] exp_cxs_tx_mem [0:15];
+    logic [SB_MSG_WIDTH-1:0] exp_fdi_tx_mem [0:15];
+    int                      exp_cxs_tx_head;
+    int                      exp_cxs_tx_tail;
+    int                      exp_cxs_tx_count;
+    int                      exp_fdi_tx_head;
+    int                      exp_fdi_tx_tail;
+    int                      exp_fdi_tx_count;
+    logic                    cxs_tx_hs_prev;
+    logic                    fdi_tx_hs_prev;
     int                      error_count;
 
     initial begin
@@ -94,7 +102,7 @@ module lme_handler_tb;
         local_flit_width_sel  = 4'd2;
         local_max_credit      = 8'd16;
         local_fifo_depth      = 8'd32;
-        local_timeout         = 8'd20;
+        local_timeout         = 8'd100;
 
         repeat (4) @(posedge cxs_clk);
         cxs_rst_n = 1'b1;
@@ -107,38 +115,39 @@ module lme_handler_tb;
         $dumpvars(0, lme_handler_tb);
     end
 
-    // DUT hookup template:
-    // lme_handler dut (
-    //     .cxs_clk            (cxs_clk),
-    //     .cxs_rst_n          (cxs_rst_n),
-    //     .fdi_lclk           (fdi_lclk),
-    //     .fdi_rst_n          (fdi_rst_n),
-    //     .cxs_sb_rx_valid    (cxs_sb_rx_valid),
-    //     .cxs_sb_rx_data     (cxs_sb_rx_data),
-    //     .cxs_sb_rx_ready    (cxs_sb_rx_ready),
-    //     .cxs_sb_tx_valid    (cxs_sb_tx_valid),
-    //     .cxs_sb_tx_data     (cxs_sb_tx_data),
-    //     .cxs_sb_tx_ready    (cxs_sb_tx_ready),
-    //     .fdi_sb_rx_valid    (fdi_sb_rx_valid),
-    //     .fdi_sb_rx_data     (fdi_sb_rx_data),
-    //     .fdi_sb_rx_ready    (fdi_sb_rx_ready),
-    //     .fdi_sb_tx_valid    (fdi_sb_tx_valid),
-    //     .fdi_sb_tx_data     (fdi_sb_tx_data),
-    //     .fdi_sb_tx_ready    (fdi_sb_tx_ready),
-    //     .lme_enable         (lme_enable),
-    //     .local_flit_width_sel(local_flit_width_sel),
-    //     .local_max_credit   (local_max_credit),
-    //     .local_fifo_depth   (local_fifo_depth),
-    //     .local_timeout      (local_timeout),
-    //     .neg_flit_width_sel (neg_flit_width_sel),
-    //     .neg_max_credit     (neg_max_credit),
-    //     .neg_fifo_depth     (neg_fifo_depth),
-    //     .lme_init_done      (lme_init_done),
-    //     .lme_active         (lme_active),
-    //     .lme_error          (lme_error),
-    //     .lme_timeout        (lme_timeout),
-    //     .lme_intr           (lme_intr)
-    // );
+    lme_handler #(
+        .SB_MSG_WIDTH (SB_MSG_WIDTH)
+    ) dut (
+        .cxs_clk             (cxs_clk),
+        .cxs_rst_n           (cxs_rst_n),
+        .fdi_lclk            (fdi_lclk),
+        .fdi_rst_n           (fdi_rst_n),
+        .cxs_sb_rx_valid     (cxs_sb_rx_valid),
+        .cxs_sb_rx_data      (cxs_sb_rx_data),
+        .cxs_sb_rx_ready     (cxs_sb_rx_ready),
+        .cxs_sb_tx_valid     (cxs_sb_tx_valid),
+        .cxs_sb_tx_data      (cxs_sb_tx_data),
+        .cxs_sb_tx_ready     (cxs_sb_tx_ready),
+        .fdi_sb_rx_valid     (fdi_sb_rx_valid),
+        .fdi_sb_rx_data      (fdi_sb_rx_data),
+        .fdi_sb_rx_ready     (fdi_sb_rx_ready),
+        .fdi_sb_tx_valid     (fdi_sb_tx_valid),
+        .fdi_sb_tx_data      (fdi_sb_tx_data),
+        .fdi_sb_tx_ready     (fdi_sb_tx_ready),
+        .lme_enable          (lme_enable),
+        .local_flit_width_sel(local_flit_width_sel),
+        .local_max_credit    (local_max_credit),
+        .local_fifo_depth    (local_fifo_depth),
+        .local_timeout       (local_timeout),
+        .neg_flit_width_sel  (neg_flit_width_sel),
+        .neg_max_credit      (neg_max_credit),
+        .neg_fifo_depth      (neg_fifo_depth),
+        .lme_init_done       (lme_init_done),
+        .lme_active          (lme_active),
+        .lme_error           (lme_error),
+        .lme_timeout         (lme_timeout),
+        .lme_intr            (lme_intr)
+    );
 
     task automatic send_cxs_msg(input logic [SB_MSG_WIDTH-1:0] msg);
         begin
@@ -186,96 +195,110 @@ module lme_handler_tb;
         end
     endfunction
 
-    task automatic compare_cxs_tx_msg(input string tag);
-        sb_msg_t exp_msg;
-        sb_msg_t got_msg;
+    task automatic push_cxs_expect(input logic [SB_MSG_WIDTH-1:0] msg);
         begin
-            if (exp_cxs_tx_queue.size() == 0) begin
+            exp_cxs_tx_mem[exp_cxs_tx_tail] = msg;
+            exp_cxs_tx_tail = (exp_cxs_tx_tail + 1) % 16;
+            exp_cxs_tx_count = exp_cxs_tx_count + 1;
+        end
+    endtask
+
+    task automatic push_fdi_expect(input logic [SB_MSG_WIDTH-1:0] msg);
+        begin
+            exp_fdi_tx_mem[exp_fdi_tx_tail] = msg;
+            exp_fdi_tx_tail = (exp_fdi_tx_tail + 1) % 16;
+            exp_fdi_tx_count = exp_fdi_tx_count + 1;
+        end
+    endtask
+
+    task automatic compare_cxs_tx_msg(input string tag);
+        logic [SB_MSG_WIDTH-1:0] exp_msg;
+        begin
+            if (exp_cxs_tx_count == 0) begin
                 error_count++;
                 $display("ERROR[%0t] %s unexpected CXS TX msg 0x%08h",
                          $time, tag, cxs_sb_tx_data);
             end
             else begin
-                exp_msg = exp_cxs_tx_queue.pop_front();
-                got_msg = unpack_msg(cxs_sb_tx_data);
-                if (got_msg !== exp_msg) begin
+                exp_msg = exp_cxs_tx_mem[exp_cxs_tx_head];
+                exp_cxs_tx_head = (exp_cxs_tx_head + 1) % 16;
+                exp_cxs_tx_count = exp_cxs_tx_count - 1;
+                if (cxs_sb_tx_data !== exp_msg) begin
                     error_count++;
                     $display("ERROR[%0t] %s CXS TX msg mismatch exp=0x%08h got=0x%08h",
-                             $time, tag,
-                             make_msg(exp_msg.opcode, exp_msg.tag, exp_msg.arg0, exp_msg.arg1, exp_msg.arg2),
-                             cxs_sb_tx_data);
+                             $time, tag, exp_msg, cxs_sb_tx_data);
                 end
             end
         end
     endtask
 
     task automatic compare_fdi_tx_msg(input string tag);
-        sb_msg_t exp_msg;
-        sb_msg_t got_msg;
+        logic [SB_MSG_WIDTH-1:0] exp_msg;
         begin
-            if (exp_fdi_tx_queue.size() == 0) begin
+            if (exp_fdi_tx_count == 0) begin
                 error_count++;
                 $display("ERROR[%0t] %s unexpected FDI TX msg 0x%08h",
                          $time, tag, fdi_sb_tx_data);
             end
             else begin
-                exp_msg = exp_fdi_tx_queue.pop_front();
-                got_msg = unpack_msg(fdi_sb_tx_data);
-                if (got_msg !== exp_msg) begin
+                exp_msg = exp_fdi_tx_mem[exp_fdi_tx_head];
+                exp_fdi_tx_head = (exp_fdi_tx_head + 1) % 16;
+                exp_fdi_tx_count = exp_fdi_tx_count - 1;
+                if (fdi_sb_tx_data !== exp_msg) begin
                     error_count++;
                     $display("ERROR[%0t] %s FDI TX msg mismatch exp=0x%08h got=0x%08h",
-                             $time, tag,
-                             make_msg(exp_msg.opcode, exp_msg.tag, exp_msg.arg0, exp_msg.arg1, exp_msg.arg2),
-                             fdi_sb_tx_data);
+                             $time, tag, exp_msg, fdi_sb_tx_data);
                 end
             end
         end
     endtask
 
     task automatic scenario_param_negotiation;
-        sb_msg_t exp_msg;
+        logic [SB_MSG_WIDTH-1:0] exp_cxs_msg;
+        logic [SB_MSG_WIDTH-1:0] exp_fdi_msg;
         begin
+            exp_cxs_msg = make_msg(OP_PARAM_ACCEPT, 4'h0, 8'd2, 8'd16, 8'd32);
+            exp_fdi_msg = make_msg(OP_ACTIVE_REQ, 4'h0, 8'h00, 8'h00, 8'h00);
+            push_cxs_expect(exp_cxs_msg);
+            push_fdi_expect(exp_fdi_msg);
+
             send_cxs_msg(make_msg(OP_PARAM_REQ, 4'h0, 8'd2, 8'd16, 8'd32));
             send_fdi_msg(make_msg(OP_PARAM_RSP, 4'h0, 8'd2, 8'd16, 8'd32));
 
-            exp_msg = '{opcode: OP_PARAM_ACCEPT, tag: 4'h0, arg0: 8'd2, arg1: 8'd16, arg2: 8'd32};
-            exp_cxs_tx_queue.push_back(exp_msg);
-
             repeat (4) @(posedge cxs_clk);
-            $display("[%0t] scenario_param_negotiation queued_cxs_tx=%0d",
-                     $time, exp_cxs_tx_queue.size());
+            $display("[%0t] scenario_param_negotiation queued_cxs_tx=%0d queued_fdi_tx=%0d",
+                     $time, exp_cxs_tx_count, exp_fdi_tx_count);
         end
     endtask
 
     task automatic scenario_param_reject;
-        sb_msg_t exp_msg;
+        logic [SB_MSG_WIDTH-1:0] exp_msg;
         begin
+            exp_msg = make_msg(OP_ERROR_MSG, 4'h0, 8'h00, 8'h00, 8'h00);
+            push_cxs_expect(exp_msg);
             send_fdi_msg(make_msg(OP_PARAM_REJECT, 4'h0, 8'hFF, 8'h00, 8'h00));
-            exp_msg = '{opcode: OP_ERROR_MSG, tag: 4'h0, arg0: 8'h00, arg1: 8'h00, arg2: 8'h00};
-            exp_cxs_tx_queue.push_back(exp_msg);
 
             repeat (4) @(posedge cxs_clk);
             $display("[%0t] scenario_param_reject queued_cxs_tx=%0d",
-                     $time, exp_cxs_tx_queue.size());
+                     $time, exp_cxs_tx_count);
         end
     endtask
 
     task automatic scenario_active_handshake;
-        sb_msg_t exp_msg;
         begin
-            exp_msg = '{opcode: OP_ACTIVE_REQ, tag: 4'h0, arg0: 8'h00, arg1: 8'h00, arg2: 8'h00};
-            exp_fdi_tx_queue.push_back(exp_msg);
-
             send_fdi_msg(make_msg(OP_ACTIVE_ACK, 4'h0, 8'h00, 8'h00, 8'h00));
 
             repeat (4) @(posedge cxs_clk);
-            $display("[%0t] scenario_active_handshake queued_fdi_tx=%0d",
-                     $time, exp_fdi_tx_queue.size());
+            if (!lme_active) begin
+                error_count++;
+                $display("ERROR[%0t] scenario_active_handshake lme_active expected 1", $time);
+            end
         end
     endtask
 
     task automatic scenario_unknown_opcode;
         begin
+            push_cxs_expect(make_msg(OP_ERROR_MSG, 4'h0, 8'h00, 8'h00, 8'h00));
             send_fdi_msg(make_msg(4'hF, 4'h0, 8'h00, 8'h00, 8'h00));
             repeat (4) @(posedge cxs_clk);
             $display("[%0t] scenario_unknown_opcode exercised", $time);
@@ -294,19 +317,56 @@ module lme_handler_tb;
     endtask
 
     always @(posedge cxs_clk) begin
-        if (cxs_sb_tx_valid && cxs_sb_tx_ready) begin
+        if ((cxs_sb_tx_valid && cxs_sb_tx_ready) && !cxs_tx_hs_prev) begin
             compare_cxs_tx_msg("cxs_tx_handshake");
         end
+        cxs_tx_hs_prev <= cxs_sb_tx_valid && cxs_sb_tx_ready;
     end
 
     always @(posedge fdi_lclk) begin
-        if (fdi_sb_tx_valid && fdi_sb_tx_ready) begin
+        if ((fdi_sb_tx_valid && fdi_sb_tx_ready) && !fdi_tx_hs_prev) begin
             compare_fdi_tx_msg("fdi_tx_handshake");
         end
+        fdi_tx_hs_prev <= fdi_sb_tx_valid && fdi_sb_tx_ready;
     end
+
+    task automatic reset_dut;
+        begin
+            cxs_rst_n       <= 1'b0;
+            fdi_rst_n       <= 1'b0;
+            cxs_sb_rx_valid <= 1'b0;
+            cxs_sb_rx_data  <= '0;
+            fdi_sb_rx_valid <= 1'b0;
+            fdi_sb_rx_data  <= '0;
+            lme_enable      <= 1'b0;
+            cxs_tx_hs_prev  <= 1'b0;
+            fdi_tx_hs_prev  <= 1'b0;
+            exp_cxs_tx_head  <= 0;
+            exp_cxs_tx_tail  <= 0;
+            exp_cxs_tx_count <= 0;
+            exp_fdi_tx_head  <= 0;
+            exp_fdi_tx_tail  <= 0;
+            exp_fdi_tx_count <= 0;
+            repeat (4) @(posedge cxs_clk);
+            cxs_rst_n <= 1'b1;
+            repeat (2) @(posedge fdi_lclk);
+            fdi_rst_n <= 1'b1;
+            @(posedge cxs_clk);
+            lme_enable <= 1'b1;
+            repeat (2) @(posedge cxs_clk);
+        end
+    endtask
 
     initial begin
         error_count = 0;
+        cxs_tx_hs_prev = 1'b0;
+        fdi_tx_hs_prev = 1'b0;
+        exp_cxs_tx_head = 0;
+        exp_cxs_tx_tail = 0;
+        exp_cxs_tx_count = 0;
+        exp_fdi_tx_head = 0;
+        exp_fdi_tx_tail = 0;
+        exp_fdi_tx_count = 0;
         @(posedge cxs_rst_n);
         @(posedge fdi_rst_n);
 
@@ -318,14 +378,18 @@ module lme_handler_tb;
         // Once the DUT is connected, outgoing sideband messages will be
         // compared automatically on valid/ready handshakes.
         scenario_param_negotiation();
-        scenario_param_reject();
         scenario_active_handshake();
+
+        reset_dut();
+        scenario_param_reject();
+
+        reset_dut();
         scenario_unknown_opcode();
         scenario_backpressure();
 
         repeat (40) @(posedge cxs_clk);
         $display("lme_handler_tb completed with error_count=%0d cxs_q=%0d fdi_q=%0d",
-                 error_count, exp_cxs_tx_queue.size(), exp_fdi_tx_queue.size());
+                 error_count, exp_cxs_tx_count, exp_fdi_tx_count);
         $finish;
     end
 

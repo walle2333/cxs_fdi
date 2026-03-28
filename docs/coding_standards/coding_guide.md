@@ -424,7 +424,7 @@ endinterface: axi4lite_io
 ### 9.1 组合逻辑
 
 ```systemverilog
-// ✓ 推荐: always_comb
+// ✓ 推荐: always_comb用于next-state、条件组合和mux
 always_comb begin
     next_state = state;
     case (state)
@@ -432,8 +432,36 @@ always_comb begin
     endcase
 end
 
-// ✗ 避免: 简单组合用assign
+// ✓ 推荐: 纯字段提取、位选、拼接、简单布尔关系用assign
 assign result = (a & b) | (c & d);
+```
+
+补充规则：
+
+- `always_comb` 不要写成过大的“全功能块”，应按作用拆分
+- 推荐拆分类别：
+  - 输入sanitize
+  - 控制位解码
+  - request汇总
+  - next-state逻辑
+  - 输出mux
+- 对纯组合的位选/切片/字段提取，优先使用 `assign`
+- 对参数化切片或指针拼接，若工具在 `always_comb` 中报敏感表 warning，优先提取为中间 `assign`
+- `always_comb` 更适合承载“条件关系”，不适合堆积大量简单切片语句
+
+示例：
+
+```systemverilog
+// ✓ 推荐: 将参数化切片提成独立assign
+assign fifo_full_cmp_gray = {
+    ~rd_gray_sync2[PTR_WIDTH-1:PTR_WIDTH-2],
+    rd_gray_sync2[PTR_WIDTH-3:0]
+};
+
+always_comb begin
+    fifo_full = (wr_gray_next == fifo_full_cmp_gray);
+    fifo_empty = (rd_gray == wr_gray_sync2);
+end
 ```
 
 ### 9.2 时序逻辑
@@ -478,6 +506,9 @@ end
 - 避免在interface中使用function/task
 - 避免简单变量名如`length`, `size`, `out`, `in`
 - 使用`always_comb`代替`assign`处理struct成员
+- 将大型组合逻辑按功能拆成多个小 `always_comb`
+- 对纯切片/拼接/字段提取优先使用 `assign`
+- 对参数化位选尽量避免直接堆叠在大型 `always_comb` 中，以提升 Icarus/开源工具兼容性
 
 ### 10.2 常用工具
 

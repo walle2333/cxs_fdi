@@ -1,0 +1,75 @@
+name: rtl-ci
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+      - feature/**
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  regress-and-synth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog yosys
+
+      - name: Show tool versions
+        run: |
+          iverilog -V
+          yosys -V
+
+      - name: Run regression
+        run: make regress
+
+      - name: Run top-level parameter matrix
+        run: make regress-matrix
+
+      - name: Run top-level simulation
+        run: make sim
+
+      - name: Run Verilator smoke
+        run: make verilate
+
+      - name: Run synthesis
+        run: make synth
+
+      - name: Upload regression artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regress-logs
+          path: |
+            sim/logs/regress.summary
+            sim/logs/regress_status.csv
+            sim/logs/regress_status.json
+            sim/logs/regress_junit.xml
+            sim/logs/regress_matrix.summary
+            sim/logs/regress_matrix.csv
+            sim/logs/verilator.log
+            sim/logs/*.iverilog.log
+            sim/logs/*.matrix.iverilog.log
+            sim/logs/*.vvp.log
+            sim/logs/*.matrix.vvp.log
+            sim/waves/verilator_top.vcd
+          if-no-files-found: warn
+
+      - name: Upload synthesis artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthesis-output
+          path: |
+            frontend/synthesis/yosys.log
+            frontend/synthesis/ucie_cxs_fdi_top.v
+          if-no-files-found: warn

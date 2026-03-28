@@ -308,6 +308,9 @@ make all
 # 仅仿真
 make sim
 
+# 逐个testbench回归
+make regress
+
 # 仅打开波形
 make wave
 
@@ -317,6 +320,122 @@ make synth
 # 清理
 make clean
 ```
+
+### 6.3 回归产物
+
+执行 `make regress` 后，会在 `sim/logs` 下生成以下文件：
+
+| 文件 | 用途 |
+|------|------|
+| `regress.summary` | 人类可读的回归摘要 |
+| `regress_status.csv` | 适合脚本处理的表格结果 |
+| `regress_status.json` | 适合CI/自动化工具消费的结构化结果 |
+| `regress_junit.xml` | 适合 GitLab CI / Jenkins / GitHub Actions 等平台展示测试结果 |
+| `<tb>.iverilog.log` | 单个 testbench 的编译日志 |
+| `<tb>.vvp.log` | 单个 testbench 的运行日志 |
+
+`regress_status.csv/json` 当前包含以下字段：
+
+- `tb`
+- `result`
+- `compile_warnings`
+- `run_error_markers`
+- `elapsed_ms`
+
+推荐用法：
+
+1. 本地开发时先运行 `make sim`
+2. 提交前运行 `make regress`
+3. 需要综合检查时运行 `make synth`
+4. 在CI中优先收集 `regress_junit.xml` 和 `regress_status.json`
+
+### 6.4 GitHub Actions 最小配置
+
+仓库当前提供了一个最小 CI 样板：
+
+- `.github/workflows/ci.yml`
+
+该工作流会在 `push`、`pull_request` 和手工触发时执行以下步骤：
+
+1. checkout 仓库
+2. 安装 `iverilog` 与 `yosys`
+3. 运行 `make regress`
+4. 运行 `make regress-matrix`
+5. 运行 `make sim`
+6. 运行 `make synth`
+7. 上传 regression 与 synthesis 产物
+
+### 6.5 顶层参数矩阵回归
+
+当前 `Makefile` 还提供了一个轻量级的顶层参数矩阵入口：
+
+```bash
+make regress-matrix
+```
+
+该目标用于对 `ucie_cxs_fdi_top_tb` 做少量 compile-time 参数扫描，当前内置 case 包括：
+
+- `default`
+- `fifo64_last0`
+- `fifo128_last1`
+- `fifo256_last1`
+- `opt_fields_off`
+- `single_pkt_mode`
+- `credit8_fifo64`
+- `user128`
+- `srcids_off`
+- `user32`
+
+当前主要扫描的参数为：
+
+- `FIFO_DEPTH`
+- `CXS_HAS_LAST`
+- `CXS_USER_WIDTH`
+- `CXS_SRCID_WIDTH`
+- `CXS_TGTID_WIDTH`
+- `CXS_CNTL_WIDTH`
+
+产物包括：
+
+- `sim/logs/regress_matrix.summary`
+- `sim/logs/regress_matrix.csv`
+- `sim/logs/<case>.matrix.iverilog.log`
+- `sim/logs/<case>.matrix.vvp.log`
+
+### 6.6 Verilator 顶层 Smoke
+
+当前 `Makefile` 还提供了一个 Verilator 顶层 smoke 入口：
+
+```bash
+make verilate
+```
+
+该目标会：
+
+1. 使用 `verilator` 构建 `ucie_cxs_fdi_top`
+2. 编译 `sim/verilator_top_main.cpp`
+3. 运行一个最小顶层 smoke 场景
+4. 生成波形与构建日志
+
+当前主要产物包括：
+
+- `sim/logs/verilator.log`
+- `sim/obj_dir/Vucie_cxs_fdi_top`
+- `sim/waves/verilator_top.vcd`
+- `docs/release/README.md`
+- `docs/release/milestone_2026_03_bridge_bringup.md`
+- `docs/release/release_prep_v0_1.md`
+
+当前 `sim/logs/verilator.log` 已收敛到 `0` 个 warning/error marker。
+
+当前上传的核心产物包括：
+
+- `sim/logs/regress.summary`
+- `sim/logs/regress_status.csv`
+- `sim/logs/regress_status.json`
+- `sim/logs/regress_junit.xml`
+- `frontend/synthesis/yosys.log`
+- `frontend/synthesis/ucie_cxs_fdi_top.v`
 
 ---
 
@@ -340,7 +459,76 @@ make clean
 
 ---
 
-## 8. 参考资源
+## 8. 当前项目状态
+
+当前项目自动化流程已经具备以下入口：
+
+- `make sim`
+  - 运行顶层 `ucie_cxs_fdi_top_tb`
+- `make regress`
+  - 逐个编译并运行全部模块级与顶层 testbench
+- `make regress-matrix`
+  - 运行顶层参数矩阵回归
+- `make verilate`
+  - 构建并运行 Verilator 顶层 smoke
+- `make synth`
+  - 对 `ucie_cxs_fdi_top` 进行 Yosys 综合
+
+当前执行结果：
+
+- `make sim`：PASS
+- `make regress`：11/11 PASS
+- `make regress-matrix`：10/10 PASS
+- `make verilate`：PASS
+- `make synth`：PASS
+- regression 编译 warning：0
+- Verilator 日志 warning：0
+- 顶层 TB 已额外覆盖 `ERROR_STOP_EN=0` timeout 行为和 `FDI_RX_ACTIVE_FOLLOW_EN` 激活行为
+- `FDI_RX_ACTIVE_FOLLOW_EN` 场景现已通过顶层真实端口 `fdi_pl_rx_active_req` 驱动，不再依赖 TB `force/release`
+
+当前回归产物路径：
+
+- `sim/logs/regress.summary`
+- `sim/logs/regress_status.csv`
+- `sim/logs/regress_status.json`
+- `sim/logs/regress_junit.xml`
+- `sim/logs/regress_matrix.summary`
+- `sim/logs/regress_matrix.csv`
+- `sim/logs/verilator.log`
+- `frontend/synthesis/yosys.log`
+- `frontend/synthesis/ucie_cxs_fdi_top.v`
+- `sim/waves/verilator_top.vcd`
+- `docs/release/README.md`
+- `docs/release/milestone_2026_03_bridge_bringup.md`
+- `docs/release/release_prep_v0_1.md`
+
+顶层 `ucie_cxs_fdi_top_tb` 当前已覆盖：
+
+- APB 基础访问
+- 硬件触发与软件触发的 link activation / deactivation / retrain / error
+- TX/RX 单 flit 通路
+- TX/RX burst 通路
+- credit 边界耗尽与恢复
+- RX `flit_cancel` 丢弃路径
+- LME 正常 negotiation
+- LME `PARAM_REJECT`
+- unknown opcode
+- timeout
+- remote `ERROR_MSG`
+- 非法 `ACTIVE_ACK`
+- sideband backpressure
+- 顶层长期协议检查
+
+相关文档建议一起阅读：
+
+- 项目根目录说明：`README.md`
+- 中文说明：`README_zh.md`
+- 验证总检查表：`docs/checklist/rtl_tb_verification_checklist.md`
+- Testbench执行计划：`docs/checklist/tb_execution_plan.md`
+
+---
+
+## 9. 参考资源
 
 - [Verilator官方文档](https://veripool.org/guide/latest/)
 - [Icarus Verilog文档](https://steveicarus.github.io/iverilog/)
@@ -349,8 +537,9 @@ make clean
 
 ---
 
-## 9. 修订记录
+## 10. 修订记录
 
 | 版本 | 日期 | 描述 |
 |------|------|------|
 | 1.0 | 2026-03-08 | 初始版本 |
+| 1.1 | 2026-03-25 | 补充当前项目自动化状态、回归产物与顶层覆盖摘要 |

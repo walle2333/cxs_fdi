@@ -8,6 +8,7 @@
 // Submodules are expected to be implemented in their own RTL files.
 
 module ucie_cxs_fdi_top #(
+    /* verilator lint_off UNUSEDPARAM */
     // Core widths
     parameter int CXS_DATA_WIDTH   = 512,
     parameter int CXS_USER_WIDTH   = 64,
@@ -29,6 +30,7 @@ module ucie_cxs_fdi_top #(
 
     // Error/status
     parameter int ERR_WIDTH        = 8
+    /* verilator lint_on UNUSEDPARAM */
 ) (
     // ----------------------------------------------------------------
     // Clocks and resets
@@ -101,11 +103,30 @@ module ucie_cxs_fdi_top #(
     input  logic                     fdi_pl_error,
     input  logic                     fdi_pl_flit_cancel,
     input  logic                     fdi_pl_idle,
+    input  logic                     fdi_pl_rx_active_req,
+
+    // ----------------------------------------------------------------
+    // Sideband Interfaces (normalized LME message channels)
+    // ----------------------------------------------------------------
+    input  logic                     cxs_sb_rx_valid,
+    input  logic [31:0]              cxs_sb_rx_data,
+    output logic                     cxs_sb_rx_ready,
+    output logic                     cxs_sb_tx_valid,
+    output logic [31:0]              cxs_sb_tx_data,
+    input  logic                     cxs_sb_tx_ready,
+    input  logic                     fdi_sb_rx_valid,
+    input  logic [31:0]              fdi_sb_rx_data,
+    output logic                     fdi_sb_rx_ready,
+    output logic                     fdi_sb_tx_valid,
+    output logic [31:0]              fdi_sb_tx_data,
+    input  logic                     fdi_sb_tx_ready,
 
     // ----------------------------------------------------------------
     // APB Interface (Configuration/Debug)
     // ----------------------------------------------------------------
+    /* verilator lint_off UNUSEDSIGNAL */
     input  logic [31:0]              apb_paddr,
+    /* verilator lint_on UNUSEDSIGNAL */
     input  logic [31:0]              apb_pwdata,
     input  logic                     apb_penable,
     input  logic                     apb_psel,
@@ -145,6 +166,10 @@ module ucie_cxs_fdi_top #(
     logic [FDI_USER_WIDTH-1:0] fdi_txp_user;
     logic [CXS_CNTL_WIDTH-1:0] fdi_txp_cntl;
     logic                      fdi_txp_last;
+    /* verilator lint_off UNUSEDSIGNAL */
+    logic [CXS_SRCID_WIDTH-1:0] fdi_txp_srcid;
+    logic [CXS_TGTID_WIDTH-1:0] fdi_txp_tgtid;
+    /* verilator lint_on UNUSEDSIGNAL */
     logic                      fdi_txp_ready;
 
     // FDI RX IF -> RX Path (fdi_lclk domain)
@@ -173,10 +198,28 @@ module ucie_cxs_fdi_top #(
     logic                      tx_credit_gnt;
     logic                      rx_credit_gnt;
     logic                      credit_ready;
+    logic [7:0]                cfg_max_credit_reg;
     logic [5:0]                cfg_credit_max;
     logic [5:0]                cfg_credit_init;
+    logic [7:0]                cfg_fifo_depth;
+    logic [7:0]                cfg_timeout;
+    logic [6:0]                cfg_retry_cnt;
+    logic [31:0]               link_ctrl_reg;
+    logic                      cfg_enable;
+    /* verilator lint_off UNUSEDSIGNAL */
+    logic [7:0]                cfg_mode;
+    logic [3:0]                cfg_flit_width_sel;
+    logic                      sw_reset_pulse;
     logic [5:0]                status_tx_credit_cnt;
     logic [5:0]                status_rx_credit_cnt;
+    logic [6:0]                err_status_in;
+    logic                      evt_link_up;
+    logic                      evt_link_down;
+    logic                      evt_fifo_almost_full;
+    logic                      stat_tx_flit_pulse;
+    logic                      stat_rx_flit_pulse;
+    logic                      irq;
+    /* verilator lint_on UNUSEDSIGNAL */
 
     // Link control signals (cxs_clk domain)
     logic                      link_active;
@@ -186,12 +229,32 @@ module ucie_cxs_fdi_top #(
     logic [2:0]                link_status;
     logic                      link_cxs_tx_active;
     logic                      link_cxs_rx_active;
+    /* verilator lint_off UNUSEDSIGNAL */
+    logic                      if_cxs_tx_active;
+    logic                      if_cxs_rx_active;
+    logic                      txp_ready_link;
+    logic                      rxp_ready_link;
 
     // CXS TX IF <-> Link Ctrl handshake placeholders
     logic                      tx_link_active_req;
     logic                      tx_link_active_ack;
     logic                      tx_link_deact_req;
     logic                      tx_link_deact_ack;
+    /* verilator lint_on UNUSEDSIGNAL */
+
+    /* verilator lint_off UNUSEDSIGNAL */
+    logic [3:0]                neg_flit_width_sel;
+    logic [7:0]                neg_max_credit;
+    logic [7:0]                neg_fifo_depth;
+    logic                      lme_init_done;
+    logic                      lme_active;
+    logic                      lme_error;
+    logic                      lme_timeout;
+    logic                      lme_intr;
+    logic [ERR_WIDTH-1:0]      tx_path_error;
+    logic [ERR_WIDTH-1:0]      rx_path_error;
+    logic                      fdi_lp_rx_active_sts_unused;
+    /* verilator lint_on UNUSEDSIGNAL */
 
     // Derived retrain indicator from state (placeholder mapping)
     logic                      fdi_pl_retrain;
@@ -200,6 +263,16 @@ module ucie_cxs_fdi_top #(
     // Placeholder link handshake mapping (to be refined in submodule integration)
     assign tx_link_active_ack = link_cxs_tx_active;
     assign tx_link_deact_ack  = 1'b0;
+    assign cfg_credit_max     = cfg_max_credit_reg[5:0];
+    assign cfg_credit_init    = cfg_max_credit_reg[5:0];
+    assign err_status_in      = {1'b0, lme_error, link_error, 4'b0000};
+    assign evt_link_up        = (link_status == 3'b011);
+    assign evt_link_down      = (link_status != 3'b011);
+    assign evt_fifo_almost_full = 1'b0;
+    assign stat_tx_flit_pulse = tx_credit_consume;
+    assign stat_rx_flit_pulse = rx_credit_consume;
+    assign txp_ready_link     = fdi_txp_ready && link_tx_ready;
+    assign rxp_ready_link     = rxp_ready_in && link_rx_ready;
 
     // ----------------------------------------------------------------
     // CXS TX Interface
@@ -222,7 +295,7 @@ module ucie_cxs_fdi_top #(
         .cxs_tx_srcid         (cxs_tx_srcid),
         .cxs_tx_tgtid         (cxs_tx_tgtid),
         .cxs_tx_active_req    (cxs_tx_active_req),
-        .cxs_tx_active        (link_cxs_tx_active),
+        .cxs_tx_active        (if_cxs_tx_active),
         .cxs_tx_deact_hint    (cxs_tx_deact_hint),
         .tx_valid_out         (txp_valid_in),
         .tx_data_out          (txp_data_in),
@@ -272,9 +345,10 @@ module ucie_cxs_fdi_top #(
         .tx_user_out    (fdi_txp_user),
         .tx_cntl_out    (fdi_txp_cntl),
         .tx_last_out    (fdi_txp_last),
-        .tx_ready_in    (fdi_txp_ready),
-        .link_active    (link_active),
-        .tx_error       (/* TODO: error status to regs */)
+        .tx_srcid_out   (fdi_txp_srcid),
+        .tx_tgtid_out   (fdi_txp_tgtid),
+        .tx_ready_in    (txp_ready_link),
+        .tx_error       (tx_path_error)
     );
 
     // ----------------------------------------------------------------
@@ -371,8 +445,8 @@ module ucie_cxs_fdi_top #(
         .rx_last_out    (rxp_last_out),
         .rx_srcid_out   (rxp_srcid_out),
         .rx_tgtid_out   (rxp_tgtid_out),
-        .rx_ready       (rxp_ready_in),
-        .rx_error       (/* TODO: error status to regs */)
+        .rx_ready       (rxp_ready_link),
+        .rx_error       (rx_path_error)
     );
 
     // ----------------------------------------------------------------
@@ -404,7 +478,7 @@ module ucie_cxs_fdi_top #(
         .cxs_rx_srcid     (cxs_rx_srcid),
         .cxs_rx_tgtid     (cxs_rx_tgtid),
         .cxs_rx_active_req(cxs_rx_active_req),
-        .cxs_rx_active    (link_cxs_rx_active),
+        .cxs_rx_active    (if_cxs_rx_active),
         .cxs_rx_deact_hint(cxs_rx_deact_hint)
     );
 
@@ -415,7 +489,7 @@ module ucie_cxs_fdi_top #(
     // Credit Manager (cxs_clk domain)
     // ----------------------------------------------------------------
     credit_mgr #(
-        .MAX_CREDIT (MAX_CREDIT)
+        .CREDIT_WIDTH (6)
     ) u_credit_mgr (
         .cxs_clk             (cxs_clk),
         .cxs_rst_n           (cxs_rst_n_int),
@@ -425,6 +499,7 @@ module ucie_cxs_fdi_top #(
         .rx_data_valid       (rx_credit_consume),
         .cxs_rx_crdret       (cxs_rx_crdret),
         .cxs_rx_crdgnt       (rx_credit_gnt),
+        .credit_ready        (credit_ready),
         .cfg_credit_max      (cfg_credit_max),
         .cfg_credit_init     (cfg_credit_init),
         .status_tx_credit_cnt(status_tx_credit_cnt),
@@ -434,7 +509,6 @@ module ucie_cxs_fdi_top #(
     // Credit manager directly interfaces with protocol layer
     assign cxs_tx_crdgnt = tx_credit_gnt;
     assign cxs_rx_crdgnt = rx_credit_gnt;
-    assign credit_ready  = tx_credit_gnt & rx_credit_gnt;
     assign cxs_tx_active = link_cxs_tx_active;
     assign cxs_rx_active = link_cxs_rx_active;
 
@@ -448,10 +522,16 @@ module ucie_cxs_fdi_top #(
         .cxs_tx_deact_hint(cxs_tx_deact_hint),
         .cxs_tx_active    (link_cxs_tx_active),
         .cxs_rx_active_req(cxs_rx_active_req),
+        .cxs_rx_deact_hint(cxs_rx_deact_hint),
         .cxs_rx_active    (link_cxs_rx_active),
         .fdi_pl_state_sts (fdi_pl_state_sts),
         .fdi_pl_retrain   (fdi_pl_retrain),
-        .credit_ready    (credit_ready),
+        .fdi_pl_rx_active_req(fdi_pl_rx_active_req),
+        .fdi_lp_rx_active_sts(fdi_lp_rx_active_sts_unused),
+        .credit_ready     (credit_ready),
+        .cfg_timeout      (cfg_timeout),
+        .cfg_retry_cnt    (cfg_retry_cnt),
+        .link_ctrl_reg    (link_ctrl_reg),
         .link_active      (link_active),
         .link_tx_ready    (link_tx_ready),
         .link_rx_ready    (link_rx_ready),
@@ -460,25 +540,77 @@ module ucie_cxs_fdi_top #(
     );
 
     // ----------------------------------------------------------------
+    // LME Handler (placeholder sideband integration)
+    // ----------------------------------------------------------------
+    lme_handler #(
+        .SB_MSG_WIDTH (32)
+    ) u_lme_handler (
+        .cxs_clk             (cxs_clk),
+        .cxs_rst_n           (cxs_rst_n_int),
+        .fdi_lclk            (fdi_lclk),
+        .fdi_rst_n           (fdi_rst_n_int),
+        .cxs_sb_rx_valid     (cxs_sb_rx_valid),
+        .cxs_sb_rx_data      (cxs_sb_rx_data),
+        .cxs_sb_rx_ready     (cxs_sb_rx_ready),
+        .cxs_sb_tx_valid     (cxs_sb_tx_valid),
+        .cxs_sb_tx_data      (cxs_sb_tx_data),
+        .cxs_sb_tx_ready     (cxs_sb_tx_ready),
+        .fdi_sb_rx_valid     (fdi_sb_rx_valid),
+        .fdi_sb_rx_data      (fdi_sb_rx_data),
+        .fdi_sb_rx_ready     (fdi_sb_rx_ready),
+        .fdi_sb_tx_valid     (fdi_sb_tx_valid),
+        .fdi_sb_tx_data      (fdi_sb_tx_data),
+        .fdi_sb_tx_ready     (fdi_sb_tx_ready),
+        .lme_enable          (cfg_enable && fdi_pl_inband_pres),
+        .local_flit_width_sel(cfg_flit_width_sel),
+        .local_max_credit    (cfg_max_credit_reg),
+        .local_fifo_depth    (cfg_fifo_depth),
+        .local_timeout       (cfg_timeout),
+        .neg_flit_width_sel  (neg_flit_width_sel),
+        .neg_max_credit      (neg_max_credit),
+        .neg_fifo_depth      (neg_fifo_depth),
+        .lme_init_done       (lme_init_done),
+        .lme_active          (lme_active),
+        .lme_error           (lme_error),
+        .lme_timeout         (lme_timeout),
+        .lme_intr            (lme_intr)
+    );
+
+    // ----------------------------------------------------------------
     // Register block (APB) - placeholder
     // ----------------------------------------------------------------
-    ucie_cxs_fdi_regs u_regs (
-        .apb_clk             (apb_clk),
-        .apb_rst_n           (apb_rst_n_int),
-        .apb_paddr           (apb_paddr),
-        .apb_pwdata          (apb_pwdata),
-        .apb_penable         (apb_penable),
-        .apb_psel            (apb_psel),
-        .apb_pwrite          (apb_pwrite),
-        .apb_prdata          (apb_prdata),
-        .apb_pready          (apb_pready),
-        .apb_pslverr         (apb_pslverr),
-        .cfg_credit_max      (cfg_credit_max),
-        .cfg_credit_init     (cfg_credit_init),
-        .status_tx_credit_cnt(status_tx_credit_cnt),
-        .status_rx_credit_cnt(status_rx_credit_cnt),
-        .link_status         (link_status),
-        .link_error          (link_error)
+    regs u_regs (
+        .pclk                (apb_clk),
+        .preset_n            (apb_rst_n_int),
+        .psel                (apb_psel),
+        .penable             (apb_penable),
+        .pwrite              (apb_pwrite),
+        .paddr               (apb_paddr[15:0]),
+        .pwdata              (apb_pwdata),
+        .prdata              (apb_prdata),
+        .pready              (apb_pready),
+        .pslverr             (apb_pslverr),
+        .status_link_state   (link_status),
+        .status_busy         (link_active),
+        .status_tx_ready     (link_tx_ready),
+        .status_rx_ready     (link_rx_ready),
+        .status_init_done    (!cfg_enable || lme_init_done),
+        .err_status_in       (err_status_in),
+        .evt_link_up         (evt_link_up),
+        .evt_link_down       (evt_link_down),
+        .evt_fifo_almost_full(evt_fifo_almost_full),
+        .stat_tx_flit_pulse  (stat_tx_flit_pulse),
+        .stat_rx_flit_pulse  (stat_rx_flit_pulse),
+        .irq                 (irq),
+        .cfg_enable          (cfg_enable),
+        .cfg_mode            (cfg_mode),
+        .cfg_flit_width_sel  (cfg_flit_width_sel),
+        .sw_reset_pulse      (sw_reset_pulse),
+        .cfg_max_credit      (cfg_max_credit_reg),
+        .cfg_fifo_depth      (cfg_fifo_depth),
+        .cfg_timeout         (cfg_timeout),
+        .cfg_retry_cnt       (cfg_retry_cnt),
+        .link_ctrl_reg       (link_ctrl_reg)
     );
 
 endmodule : ucie_cxs_fdi_top

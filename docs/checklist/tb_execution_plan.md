@@ -1,8 +1,8 @@
 # UCIe CXS-FDI Testbench Execution Plan
 
 **文档编号**: [CHK-TB-PLAN-001]  
-**版本**: v0.1  
-**日期**: 2026-03-21  
+**版本**: v0.2  
+**日期**: 2026-03-25  
 **状态**: Draft
 
 ---
@@ -12,6 +12,8 @@
 | 版本 | 日期 | 变更描述 |
 |------|------|----------|
 | v0.1 | 2026-03-21 | 初始版本，整理 Testbench 执行计划 |
+| v0.2 | 2026-03-25 | 同步当前执行进展，补充顶层 LME 错误路径、sideband backpressure 与长期检查 |
+| v0.3 | 2026-03-27 | 同步顶层集成 TB 的 `ERROR_STOP_EN=0` timeout 行为与 `FDI_RX_ACTIVE_FOLLOW_EN` 激活行为 |
 
 ---
 
@@ -66,6 +68,9 @@
 目标：
 - 验证 sideband 协商
 - 验证链路初始化、激活、停用、异常流程
+- 验证顶层 LME 错误路径与 sideband backpressure
+- 验证 `ERROR_STOP_EN=0` timeout 行为
+- 验证 `FDI_RX_ACTIVE_FOLLOW_EN` 激活行为
 
 ---
 
@@ -137,6 +142,14 @@
 - 上电初始化
 - 协商完成后进入运行
 - 传输过程中停用/重训练/错误恢复
+- `PARAM_REJECT`
+- unknown opcode
+- timeout
+- remote `ERROR_MSG`
+- 非法 `ACTIVE_ACK`
+- sideband backpressure
+- `ERROR_STOP_EN=0` timeout 行为
+- `FDI_RX_ACTIVE_FOLLOW_EN` 激活行为
 
 ---
 
@@ -163,6 +176,8 @@
 - 所有状态机状态全覆盖
 - 所有关键状态转移全覆盖
 - 正常流与错误流均覆盖
+- 顶层 LME 正常流与错误流均覆盖
+- `ERROR_STOP_EN=0` timeout 行为与 `FDI_RX_ACTIVE_FOLLOW_EN` 激活行为均至少覆盖一次
 
 ### 5.2 参数覆盖
 
@@ -179,6 +194,8 @@
 - `link_state x fdi_pl_state_sts`
 - `opcode x lme_state`
 - `fifo_level x backpressure`
+- `sideband_direction x backpressure`
+- `lme_error_type x sideband_response`
 
 ---
 
@@ -197,6 +214,9 @@
 集成级退出准则：
 - 初始化、运行、停用、重训练、错误恢复完整跑通
 - 关键寄存器和状态可观测
+- 顶层 LME 正常流与错误流完整跑通
+- `ERROR_STOP_EN=0` timeout 行为与 `FDI_RX_ACTIVE_FOLLOW_EN` 激活行为完整跑通
+- 顶层长期检查无失败项
 
 ---
 
@@ -216,7 +236,54 @@
 
 ---
 
-## 8. 相关文档 / Related Documents
+## 8. 当前执行状态 / Current Status
+
+截至目前，以下 testbench 已完成并纳入 `make regress`：
+
+- `credit_mgr_tb`
+- `cxs_fdi_link_ctrl_tb`
+- `regs_tb`
+- `tx_path_tb`
+- `rx_path_tb`
+- `cxs_tx_if_tb`
+- `cxs_rx_if_tb`
+- `fdi_tx_if_tb`
+- `fdi_rx_if_tb`
+- `lme_handler_tb`
+- `ucie_cxs_fdi_top_tb`
+
+当前执行结果：
+
+- `make regress`：11/11 PASS
+- `make sim`：PASS
+- `make synth`：PASS
+
+顶层 `ucie_cxs_fdi_top_tb` 当前已覆盖：
+
+- APB sanity
+- link activation
+- TX/RX 单 flit 流程
+- deactivate / retrain / top-level error
+- LME 正常 negotiation
+- `PARAM_REJECT`
+- unknown opcode
+- timeout
+- remote `ERROR_MSG`
+- 非法 `ACTIVE_ACK`
+- sideband backpressure
+
+顶层长期检查当前已启用：
+
+- sideband `valid && !ready` 期间 `valid` 不得掉
+- sideband `valid && !ready` 期间 `data` 必须保持稳定
+- `lme_timeout -> lme_intr`
+- `lme_error -> lme_intr`
+- `lme_active -> lme_init_done`
+- `link_error -> cxs_tx_active/cxs_rx_active == 0`
+
+---
+
+## 9. 相关文档 / Related Documents
 
 - 总体架构规格：`docs/specification/ucie_cxs_fdi_arch_spec.md`
 - RTL/TB总检查表：`docs/checklist/rtl_tb_verification_checklist.md`

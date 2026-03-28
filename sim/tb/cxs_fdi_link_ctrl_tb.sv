@@ -36,6 +36,7 @@ module cxs_fdi_link_ctrl_tb;
     logic       cxs_rx_deact_hint;
     logic       cxs_rx_active;
     logic [3:0] fdi_pl_state_sts;
+    logic       fdi_pl_retrain;
     logic       fdi_pl_rx_active_req;
     logic       fdi_lp_rx_active_sts;
     logic       credit_ready;
@@ -69,11 +70,12 @@ module cxs_fdi_link_ctrl_tb;
         cxs_rx_active_req     = 1'b0;
         cxs_rx_deact_hint     = 1'b0;
         fdi_pl_state_sts      = 4'b0000;
+        fdi_pl_retrain        = 1'b0;
         fdi_pl_rx_active_req  = 1'b0;
         credit_ready          = 1'b0;
         cfg_timeout           = 8'd16;
         cfg_retry_cnt         = 7'd2;
-        link_ctrl_reg         = '0;
+        link_ctrl_reg         = 32'h0000_0700;
 
         repeat (4) @(posedge cxs_clk);
         cxs_rst_n = 1'b1;
@@ -84,29 +86,29 @@ module cxs_fdi_link_ctrl_tb;
         $dumpvars(0, cxs_fdi_link_ctrl_tb);
     end
 
-    // DUT hookup template:
-    // cxs_fdi_link_ctrl dut (
-    //     .cxs_clk             (cxs_clk),
-    //     .cxs_rst_n           (cxs_rst_n),
-    //     .cxs_tx_active_req   (cxs_tx_active_req),
-    //     .cxs_tx_deact_hint   (cxs_tx_deact_hint),
-    //     .cxs_tx_active       (cxs_tx_active),
-    //     .cxs_rx_active_req   (cxs_rx_active_req),
-    //     .cxs_rx_deact_hint   (cxs_rx_deact_hint),
-    //     .cxs_rx_active       (cxs_rx_active),
-    //     .fdi_pl_state_sts    (fdi_pl_state_sts),
-    //     .fdi_pl_rx_active_req(fdi_pl_rx_active_req),
-    //     .fdi_lp_rx_active_sts(fdi_lp_rx_active_sts),
-    //     .credit_ready        (credit_ready),
-    //     .cfg_timeout         (cfg_timeout),
-    //     .cfg_retry_cnt       (cfg_retry_cnt),
-    //     .link_ctrl_reg       (link_ctrl_reg),
-    //     .link_active         (link_active),
-    //     .link_tx_ready       (link_tx_ready),
-    //     .link_rx_ready       (link_rx_ready),
-    //     .link_error          (link_error),
-    //     .link_status         (link_status)
-    // );
+    cxs_fdi_link_ctrl dut (
+        .cxs_clk              (cxs_clk),
+        .cxs_rst_n            (cxs_rst_n),
+        .cxs_tx_active_req    (cxs_tx_active_req),
+        .cxs_tx_deact_hint    (cxs_tx_deact_hint),
+        .cxs_tx_active        (cxs_tx_active),
+        .cxs_rx_active_req    (cxs_rx_active_req),
+        .cxs_rx_deact_hint    (cxs_rx_deact_hint),
+        .cxs_rx_active        (cxs_rx_active),
+        .fdi_pl_state_sts     (fdi_pl_state_sts),
+        .fdi_pl_retrain       (fdi_pl_retrain),
+        .fdi_pl_rx_active_req (fdi_pl_rx_active_req),
+        .fdi_lp_rx_active_sts (fdi_lp_rx_active_sts),
+        .credit_ready         (credit_ready),
+        .cfg_timeout          (cfg_timeout),
+        .cfg_retry_cnt        (cfg_retry_cnt),
+        .link_ctrl_reg        (link_ctrl_reg),
+        .link_active          (link_active),
+        .link_tx_ready        (link_tx_ready),
+        .link_rx_ready        (link_rx_ready),
+        .link_error           (link_error),
+        .link_status          (link_status)
+    );
 
     task automatic issue_sw_activate;
         begin
@@ -219,20 +221,27 @@ module cxs_fdi_link_ctrl_tb;
     task automatic scenario_activate_to_run;
         begin
             @(posedge cxs_clk);
+            fdi_pl_state_sts  <= FDI_ACTIVE_STS;
+            fdi_pl_retrain    <= 1'b0;
+            credit_ready      <= 1'b0;
             cxs_tx_active_req <= 1'b1;
+            cxs_rx_active_req <= 1'b1;
+            link_ctrl_reg[0]  <= 1'b1;
             model_set_state(ST_ACTIV_REQ);
             @(posedge cxs_clk);
             cxs_tx_active_req <= 1'b0;
-            repeat (2) @(posedge cxs_clk);
+            cxs_rx_active_req <= 1'b0;
+            link_ctrl_reg[0]  <= 1'b0;
+            repeat (1) @(posedge cxs_clk);
             print_expected_state("activate_req");
             check_observed_state("activate_req");
 
+            credit_ready <= 1'b1;
             model_set_state(ST_ACTIV_ACK);
             repeat (2) @(posedge cxs_clk);
             print_expected_state("activate_ack");
             check_observed_state("activate_ack");
 
-            credit_ready <= 1'b1;
             model_set_state(ST_RUN);
             repeat (2) @(posedge cxs_clk);
             print_expected_state("run_state");
@@ -244,16 +253,20 @@ module cxs_fdi_link_ctrl_tb;
         begin
             @(posedge cxs_clk);
             cxs_tx_deact_hint <= 1'b1;
+            cxs_rx_deact_hint <= 1'b1;
+            link_ctrl_reg[1]  <= 1'b1;
             model_set_state(ST_DEACT);
             @(posedge cxs_clk);
             cxs_tx_deact_hint <= 1'b0;
-            repeat (2) @(posedge cxs_clk);
+            cxs_rx_deact_hint <= 1'b0;
+            link_ctrl_reg[1]  <= 1'b0;
+            repeat (1) @(posedge cxs_clk);
             print_expected_state("deact_state");
             check_observed_state("deact_state");
 
             credit_ready <= 1'b0;
             model_set_state(ST_STOP);
-            repeat (2) @(posedge cxs_clk);
+            repeat (1) @(posedge cxs_clk);
             print_expected_state("stop_after_deact");
             check_observed_state("stop_after_deact");
         end
@@ -262,18 +275,33 @@ module cxs_fdi_link_ctrl_tb;
     task automatic scenario_retrain_return;
         begin
             // Re-enter RUN first.
-            credit_ready     <= 1'b1;
-            fdi_pl_state_sts <= FDI_ACTIVE_STS;
+            credit_ready      <= 1'b0;
+            fdi_pl_state_sts  <= FDI_ACTIVE_STS;
+            fdi_pl_retrain    <= 1'b0;
+            cxs_tx_active_req <= 1'b1;
+            cxs_rx_active_req <= 1'b1;
+            link_ctrl_reg[0]  <= 1'b1;
+            model_set_state(ST_ACTIV_REQ);
+            @(posedge cxs_clk);
+            cxs_tx_active_req <= 1'b0;
+            cxs_rx_active_req <= 1'b0;
+            link_ctrl_reg[0]  <= 1'b0;
+            repeat (1) @(posedge cxs_clk);
+            credit_ready <= 1'b1;
+            model_set_state(ST_ACTIV_ACK);
+            repeat (1) @(posedge cxs_clk);
             model_set_state(ST_RUN);
-            repeat (2) @(posedge cxs_clk);
+            repeat (1) @(posedge cxs_clk);
 
-            fdi_pl_state_sts <= FDI_RETRAIN_STS;
+            fdi_pl_state_sts  <= FDI_RETRAIN_STS;
+            fdi_pl_retrain    <= 1'b1;
             model_set_state(ST_RETRAIN);
             repeat (2) @(posedge cxs_clk);
             print_expected_state("retrain_state");
             check_observed_state("retrain_state");
 
-            fdi_pl_state_sts <= FDI_ACTIVE_STS;
+            fdi_pl_state_sts  <= FDI_ACTIVE_STS;
+            fdi_pl_retrain    <= 1'b0;
             model_set_state(ST_RUN);
             repeat (2) @(posedge cxs_clk);
             print_expected_state("run_after_retrain");
@@ -285,8 +313,10 @@ module cxs_fdi_link_ctrl_tb;
         begin
             // ERROR_STOP_EN = 0
             @(posedge cxs_clk);
-            link_ctrl_reg[10] <= 1'b0;
-            credit_ready      <= 1'b0;
+            link_ctrl_reg = 32'h0000_0300;
+            repeat (4) @(posedge cxs_clk);
+            fdi_pl_state_sts  = FDI_RESET_STS;
+            credit_ready      = 1'b1;
             model_set_state(ST_STOP);
             repeat (2) @(posedge cxs_clk);
             print_expected_state("error_stop_disabled");

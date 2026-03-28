@@ -59,22 +59,23 @@ module credit_mgr_tb;
         $dumpvars(0, credit_mgr_tb);
     end
 
-    // DUT hookup template:
-    // credit_mgr dut (
-    //     .cxs_clk             (cxs_clk),
-    //     .cxs_rst_n           (cxs_rst_n),
-    //     .tx_data_valid       (tx_data_valid),
-    //     .cxs_tx_crdret       (cxs_tx_crdret),
-    //     .cxs_tx_crdgnt       (cxs_tx_crdgnt),
-    //     .rx_data_valid       (rx_data_valid),
-    //     .cxs_rx_crdret       (cxs_rx_crdret),
-    //     .cxs_rx_crdgnt       (cxs_rx_crdgnt),
-    //     .credit_ready        (credit_ready),
-    //     .cfg_credit_max      (cfg_credit_max),
-    //     .cfg_credit_init     (cfg_credit_init),
-    //     .status_tx_credit_cnt(status_tx_credit_cnt),
-    //     .status_rx_credit_cnt(status_rx_credit_cnt)
-    // );
+    credit_mgr #(
+        .CREDIT_WIDTH (6)
+    ) dut (
+        .cxs_clk              (cxs_clk),
+        .cxs_rst_n            (cxs_rst_n),
+        .tx_data_valid        (tx_data_valid),
+        .cxs_tx_crdret        (cxs_tx_crdret),
+        .cxs_tx_crdgnt        (cxs_tx_crdgnt),
+        .rx_data_valid        (rx_data_valid),
+        .cxs_rx_crdret        (cxs_rx_crdret),
+        .cxs_rx_crdgnt        (cxs_rx_crdgnt),
+        .credit_ready         (credit_ready),
+        .cfg_credit_max       (cfg_credit_max),
+        .cfg_credit_init      (cfg_credit_init),
+        .status_tx_credit_cnt (status_tx_credit_cnt),
+        .status_rx_credit_cnt (status_rx_credit_cnt)
+    );
 
     task automatic send_tx_flit;
         begin

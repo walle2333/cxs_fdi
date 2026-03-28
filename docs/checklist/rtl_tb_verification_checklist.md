@@ -12,6 +12,8 @@
 | 版本 | 日期 | 变更描述 |
 |------|------|----------|
 | v0.1 | 2026-03-21 | 初始版本，整理 RTL/TB 总览检查表 |
+| v0.2 | 2026-03-25 | 补充顶层集成 TB 的 LME 错误路径、sideband backpressure 与长期检查项 |
+| v0.3 | 2026-03-27 | 同步顶层集成 TB 的 `ERROR_STOP_EN=0` timeout 行为与 `FDI_RX_ACTIVE_FOLLOW_EN` 激活行为 |
 
 ---
 
@@ -40,6 +42,7 @@
 - `cxs_fdi_link_ctrl`
 - `lme_handler`
 - `regs`
+- `ucie_cxs_fdi_top`
 
 相关规格文档位于：
 - `docs/specification/ucie_cxs_fdi_arch_spec.md`
@@ -140,6 +143,17 @@
 - 验证 `STATUS/ERR_STATUS/INT_STATUS` 映射正确
 - 验证 `LINK_CTRL` 字段能驱动 `cxs_fdi_link_ctrl`
 
+### 3.11 ucie_cxs_fdi_top
+
+- 验证 APB sanity、link activation、TX/RX 单 flit 流程
+- 验证 deactivation、retrain、top-level error 流程
+- 验证 LME 正常 negotiation
+- 验证 LME `PARAM_REJECT`、unknown opcode、timeout、remote `ERROR_MSG`
+- 验证 `ERROR_STOP_EN=0` timeout 行为
+- 验证 `FDI_RX_ACTIVE_FOLLOW_EN` 激活行为
+- 验证非法 `ACTIVE_ACK` 时进入错误流
+- 验证 sideband backpressure 下 `valid/data` 保持稳定
+
 ---
 
 ## 4. 推荐 Assertion Checklist
@@ -171,11 +185,21 @@
 - `NEGOTIATE` 前禁止 `ACTIVE_REQ/ACTIVE_ACK`
 - 未知 opcode 必须进入错误流
 - CDC FIFO 出口顺序必须等于入口顺序
+- `lme_timeout -> lme_intr`
+- `lme_error -> lme_intr`
+- `lme_active -> lme_init_done`
 
 ### 4.6 Path 数据一致性
 
 - 入队字段与出队字段最终一致
 - FIFO 满/空时无非法读写
+
+### 4.7 Top 集成长期检查
+
+- sideband 通道在 `valid && !ready` 期间 `valid` 不得掉
+- sideband 通道在 `valid && !ready` 期间 `data` 必须保持稳定
+- `link_error` 期间 `cxs_tx_active/cxs_rx_active` 必须保持为低
+- 顶层错误流进入后不得残留错误方向的 sideband 回送
 
 ---
 
@@ -191,6 +215,7 @@
   - `tgtid`
 - 对 `tx_path/rx_path` 分别维护独立 scoreboard
 - 对 `lme_handler` 维护 sideband message scoreboard，检查 opcode、tag、arg0/1/2
+- 对 `ucie_cxs_fdi_top` 维护顶层 sideband 事务检查，确认错误流回送方向与次数正确
 
 ---
 
@@ -201,6 +226,7 @@
 - 所有状态机状态至少覆盖一次
 - 所有状态转移至少覆盖一次
 - 正常流与错误流都被覆盖
+- 顶层 LME 正常流与错误流都至少覆盖一次
 - 可选参数组合至少覆盖：
   - `CXS_USER_WIDTH = 0 / 非0`
   - `CXS_SRCID_WIDTH = 0 / 非0`
@@ -215,6 +241,8 @@
 - `link_state x fdi_pl_state_sts`
 - `lme_state x opcode`
 - `fifo_level x backpressure`
+- `sideband_direction x backpressure`
+- `lme_error_type x sideband_response`
 
 ---
 
@@ -223,7 +251,8 @@
 1. 先完成 `credit_mgr`、`cxs_fdi_link_ctrl`、`regs` 的 directed TB
 2. 再完成 `tx_path`、`rx_path` 的 scoreboard 与 assertion
 3. 再完成 `cxs_tx_if`、`cxs_rx_if`、`fdi_tx_if`、`fdi_rx_if`
-4. 最后完成 `lme_handler` 与端到端集成验证
+4. 再完成 `lme_handler`
+5. 最后完成 `ucie_cxs_fdi_top` 顶层集成验证与长期检查
 
 ---
 
