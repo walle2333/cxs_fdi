@@ -217,10 +217,10 @@ verilate: $(VL_EXE)
 $(VL_EXE): $(RTL_FILES) $(VL_MAIN)
 	@mkdir -p $(SIM_LOGS) $(VL_DIR)
 	@echo "=== Building Verilator model for $(TOP_MODULE) ==="
-	$(VERILATOR) --cc --exe --build --trace-vcd -Wall -Wno-fatal \
+	$(VERILATOR) --cc --exe --build --trace -Wall -Wno-fatal \
 		--top-module $(TOP_MODULE) \
 		-Mdir $(VL_DIR) \
-		$(RTL_FILES) $(VL_MAIN) 2>&1 | tee $(SIM_LOGS)/verilator.log
+		$(RTL_FILES) $(VL_MAIN) > $(SIM_LOGS)/verilator.log 2>&1
 
 synth: $(SYN_NETLIST)
 

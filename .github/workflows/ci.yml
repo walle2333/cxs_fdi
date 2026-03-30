@@ -47,6 +47,14 @@ jobs:
       - name: Run synthesis
         run: make synth
 
+      - name: Verify key outputs
+        run: |
+          test -f sim/logs/regress.summary
+          test -f sim/logs/regress_matrix.summary
+          test -f sim/logs/verilator.log
+          test -f frontend/synthesis/yosys.log
+          test -f frontend/synthesis/ucie_cxs_fdi_top.v
+
       - name: Upload regression artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -65,7 +73,7 @@ jobs:
             sim/logs/*.vvp.log
             sim/logs/*.matrix.vvp.log
             sim/waves/verilator_top.vcd
-          if-no-files-found: warn
+          if-no-files-found: ignore
 
       - name: Upload synthesis artifacts
         if: always()
@@ -75,4 +83,4 @@ jobs:
           path: |
             frontend/synthesis/yosys.log
             frontend/synthesis/ucie_cxs_fdi_top.v
-          if-no-files-found: warn
+          if-no-files-found: ignore
