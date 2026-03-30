@@ -14,6 +14,8 @@ jobs:
   regress-and-synth:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
       - name: Checkout repository
@@ -22,12 +24,13 @@ jobs:
       - name: Install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y iverilog yosys
+          sudo apt-get install -y iverilog yosys verilator g++ make
 
       - name: Show tool versions
         run: |
           iverilog -V
           yosys -V
+          verilator --version
 
       - name: Run regression
         run: make regress
