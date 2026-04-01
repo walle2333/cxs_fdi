@@ -3,9 +3,8 @@
  **********************************************************************/
 
 #include <cstdint>
-#include <filesystem>
+#include <cstdlib>
 #include <iostream>
-#include <memory>
 
 #include "Vucie_cxs_fdi_top.h"
 #include "verilated.h"
@@ -29,15 +28,14 @@ void set_flit_word(WData* bus, std::uint64_t value) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::filesystem::create_directories("sim/waves");
+    (void)std::system("mkdir -p sim/waves");
 
-    auto contextp = std::make_unique<VerilatedContext>();
-    contextp->commandArgs(argc, argv);
-    contextp->traceEverOn(true);
+    Verilated::commandArgs(argc, argv);
+    Verilated::traceEverOn(true);
 
-    auto top = std::make_unique<Vucie_cxs_fdi_top>(contextp.get(), "TOP");
-    auto tfp = std::make_unique<VerilatedVcdC>();
-    top->trace(tfp.get(), 99);
+    Vucie_cxs_fdi_top* top = new Vucie_cxs_fdi_top;
+    VerilatedVcdC* tfp = new VerilatedVcdC;
+    top->trace(tfp, 99);
     tfp->open("sim/waves/verilator_top.vcd");
 
     top->cxs_clk = 0;
@@ -96,8 +94,7 @@ int main(int argc, char** argv) {
     bool saw_link_active = false;
     bool saw_tx_flit = false;
 
-    for (vluint64_t sim_time = 0; sim_time < kMaxTime && !contextp->gotFinish(); ++sim_time) {
-        contextp->timeInc(1);
+    for (vluint64_t sim_time = 0; sim_time < kMaxTime && !Verilated::gotFinish(); ++sim_time) {
 
         if ((sim_time % kCxsHalfPeriod) == 0) {
             top->cxs_clk = !top->cxs_clk;
@@ -147,7 +144,7 @@ int main(int argc, char** argv) {
         }
 
         top->eval();
-        tfp->dump(contextp->time());
+        tfp->dump(sim_time);
 
         if (top->cxs_tx_active && top->cxs_rx_active) {
             saw_link_active = true;
@@ -159,6 +156,8 @@ int main(int argc, char** argv) {
 
     top->final();
     tfp->close();
+    delete tfp;
+    delete top;
 
     if (!saw_link_active) {
         std::cerr << "ERROR: Verilator smoke did not observe active link\n";

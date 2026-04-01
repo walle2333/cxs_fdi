@@ -933,8 +933,15 @@ module ucie_cxs_fdi_top_tb;
     task automatic scenario_link_ctrl_error_stop_disable;
         begin
             pulse_sw_reset();
+            // Bring link FSM to a known STOP baseline. rst_sw does not reset link_ctrl FSM state.
             cxs_tx_active_req <= 1'b0;
             cxs_rx_active_req <= 1'b0;
+            cxs_tx_deact_hint <= 1'b1;
+            cxs_rx_deact_hint <= 1'b1;
+            @(posedge cxs_clk);
+            cxs_tx_deact_hint <= 1'b0;
+            cxs_rx_deact_hint <= 1'b0;
+            wait_link_state(3'b000, "STOP");
             fdi_pl_state_sts  <= 4'b0000;
             fdi_pl_idle       <= 1'b1;
 
@@ -955,8 +962,15 @@ module ucie_cxs_fdi_top_tb;
     task automatic scenario_fdi_rx_active_follow;
         begin
             pulse_sw_reset();
+            // Bring link FSM to a known STOP baseline. rst_sw does not reset link_ctrl FSM state.
             cxs_tx_active_req <= 1'b0;
             cxs_rx_active_req <= 1'b0;
+            cxs_tx_deact_hint <= 1'b1;
+            cxs_rx_deact_hint <= 1'b1;
+            @(posedge cxs_clk);
+            cxs_tx_deact_hint <= 1'b0;
+            cxs_rx_deact_hint <= 1'b0;
+            wait_link_state(3'b000, "STOP");
             fdi_pl_rx_active_req <= 1'b0;
 
             @(posedge fdi_lclk);

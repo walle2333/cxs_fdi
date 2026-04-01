@@ -220,7 +220,12 @@ $(VL_EXE): $(RTL_FILES) $(VL_MAIN)
 	$(VERILATOR) --cc --exe --build --trace -Wall -Wno-fatal \
 		--top-module $(TOP_MODULE) \
 		-Mdir $(VL_DIR) \
-		$(RTL_FILES) $(VL_MAIN) > $(SIM_LOGS)/verilator.log 2>&1
+		$(RTL_FILES) $(VL_MAIN) > $(SIM_LOGS)/verilator.log 2>&1 || \
+		{ \
+			echo "Verilator build failed. Showing tail of $(SIM_LOGS)/verilator.log"; \
+			tail -n 200 $(SIM_LOGS)/verilator.log; \
+			exit 1; \
+		}
 
 synth: $(SYN_NETLIST)
 
